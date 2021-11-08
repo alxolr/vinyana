@@ -1,6 +1,6 @@
 use std::ops::{Add, Mul};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Matrix {
     pub cols: usize,
     pub rows: usize,
@@ -47,6 +47,21 @@ impl Matrix {
         }
 
         trans
+    }
+
+    pub fn map<F>(&mut self, func: F) -> Matrix
+    where
+        F: Fn(f32) -> f32,
+    {
+        let mut result = Matrix::new(self.rows, self.cols);
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                result.data[i][j] = func(self.data[i][j]);
+            }
+        }
+
+        result
     }
 }
 
