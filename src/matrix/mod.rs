@@ -24,6 +24,17 @@ impl Matrix {
         Matrix { rows, cols, data }
     }
 
+    pub fn from_vec(vec: Vec<Vec<f32>>) -> Matrix {
+        let rows = vec.len();
+        let cols = vec[0].len();
+
+        let mut matrix = Matrix::new(rows, cols);
+
+        matrix.data = vec;
+
+        matrix
+    }
+
     pub fn transpose(self) -> Matrix {
         let rows = self.cols;
         let cols = self.rows;
@@ -72,6 +83,28 @@ impl Mul<f32> for Matrix {
     }
 }
 
+impl Mul<Matrix> for Matrix {
+    type Output = Self;
+
+    fn mul(self, rhs: Matrix) -> Self::Output {
+        let cols = rhs.cols;
+        let rows = self.rows;
+        let mut result = Matrix::new(rows, cols);
+
+        for i in 0..self.rows {
+            for j in 0..cols {
+                let mut sum = 0.0;
+                for k in 0..rhs.rows {
+                    sum += self.data[i][k] * rhs.data[k][j];
+                }
+
+                result.data[i][j] = sum;
+            }
+        }
+
+        result
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -111,12 +144,41 @@ mod tests {
     }
 
     #[test]
-    fn test_transpose_more_complex() {
+    fn test_transpose_complex() {
         let mut matrix = Matrix::new(2, 3);
         matrix.data = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
 
         let expected = vec![vec![1.0, 4.0], vec![2.0, 5.0], vec![3.0, 6.0]];
 
         assert_eq!((matrix.transpose()).data, expected);
+    }
+
+    #[test]
+    fn test_matrix_multiply_matrix() {
+        let mut m1 = Matrix::new(1, 2);
+        m1.data = vec![vec![1f32, 2f32]];
+
+        let mut m2 = Matrix::new(2, 1);
+        m2.data = vec![vec![3f32], vec![4f32]];
+
+        let scenarios = vec![
+            (
+                vec![vec![1.0, 2.0], vec![3.0, 4.0]],
+                vec![vec![3.0], vec![4.0]],
+                vec![vec![11.0], vec![25.0]],
+            ),
+            (
+                vec![vec![1f32, 2f32]],
+                vec![vec![3f32], vec![4f32]],
+                vec![vec![11.0]],
+            ),
+        ];
+
+        for (first, second, exp) in scenarios {
+            let m1 = Matrix::from_vec(first);
+            let m2 = Matrix::from_vec(second);
+
+            assert_eq!((m1 * m2).data, exp);
+        }
     }
 }
