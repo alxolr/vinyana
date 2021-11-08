@@ -23,6 +23,20 @@ impl Matrix {
 
         Matrix { rows, cols, data }
     }
+
+    pub fn transpose(self) -> Matrix {
+        let rows = self.cols;
+        let cols = self.rows;
+        let mut trans = Matrix::new(rows, cols);
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                trans.data[j][i] = self.data[i][j];
+            }
+        }
+
+        trans
+    }
 }
 
 impl Add<f32> for Matrix {
@@ -73,13 +87,36 @@ mod tests {
     #[test]
     fn test_add_f32() {
         let matrix = Matrix::new(2, 2);
-        assert_eq!((matrix + 1.0).data, vec![vec![1f32, 1f32], vec![1f32, 1f32]])
+        assert_eq!(
+            (matrix + 1.0).data,
+            vec![vec![1f32, 1f32], vec![1f32, 1f32]]
+        );
     }
 
     #[test]
     fn test_multiply_f32() {
         let matrix = Matrix::new(2, 2) + 1.5;
-        
-        assert_eq!((matrix * 2.0).data, vec![vec![3f32, 3f32], vec![3f32, 3f32]])
+
+        assert_eq!(
+            (matrix * 2.0).data,
+            vec![vec![3f32, 3f32], vec![3f32, 3f32]]
+        );
+    }
+
+    #[test]
+    fn test_transpose() {
+        let matrix = Matrix::new(1, 2);
+
+        assert_eq!((matrix.transpose()).data, vec![vec![0f32], vec![0f32]]);
+    }
+
+    #[test]
+    fn test_transpose_more_complex() {
+        let mut matrix = Matrix::new(2, 3);
+        matrix.data = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+
+        let expected = vec![vec![1.0, 4.0], vec![2.0, 5.0], vec![3.0, 6.0]];
+
+        assert_eq!((matrix.transpose()).data, expected);
     }
 }
