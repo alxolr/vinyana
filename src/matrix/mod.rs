@@ -1,3 +1,6 @@
+use std::ops::{Add, Mul};
+
+#[derive(PartialEq)]
 pub struct Matrix {
     pub cols: usize,
     pub rows: usize,
@@ -22,6 +25,39 @@ impl Matrix {
     }
 }
 
+impl Add<f32> for Matrix {
+    type Output = Self;
+
+    fn add(self, rhs: f32) -> Self::Output {
+        let mut result = Matrix::new(self.rows, self.cols);
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                result.data[i][j] = self.data[i][j] + rhs;
+            }
+        }
+
+        result
+    }
+}
+
+/// Multiply float values
+impl Mul<f32> for Matrix {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        let mut result = Matrix::new(self.rows, self.cols);
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                result.data[i][j] = self.data[i][j] * rhs;
+            }
+        }
+
+        result
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -32,5 +68,18 @@ mod tests {
     fn test_new_matrix() {
         let matrix = Matrix::new(2, 2);
         assert_eq!(matrix.data, vec![vec![0f32, 0f32], vec![0f32, 0f32]]);
+    }
+
+    #[test]
+    fn test_add_f32() {
+        let matrix = Matrix::new(2, 2);
+        assert_eq!((matrix + 1.0).data, vec![vec![1f32, 1f32], vec![1f32, 1f32]])
+    }
+
+    #[test]
+    fn test_multiply_f32() {
+        let matrix = Matrix::new(2, 2) + 1.5;
+        
+        assert_eq!((matrix * 2.0).data, vec![vec![3f32, 3f32], vec![3f32, 3f32]])
     }
 }
