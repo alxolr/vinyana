@@ -1,4 +1,4 @@
-use std::ops::{Add, Mul};
+use std::ops::{Add, Mul, Sub};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Matrix {
@@ -24,18 +24,18 @@ impl Matrix {
         Matrix { rows, cols, data }
     }
 
-    pub fn from_vec(vec: Vec<Vec<f32>>) -> Matrix {
+    pub fn from_vec(vec: &Vec<Vec<f32>>) -> Matrix {
         let rows = vec.len();
         let cols = vec[0].len();
 
         let mut matrix = Matrix::new(rows, cols);
 
-        matrix.data = vec;
+        matrix.data = vec.to_vec();
 
         matrix
     }
 
-    pub fn transpose(self) -> Matrix {
+    pub fn transpose(&self) -> Matrix {
         let rows = self.cols;
         let cols = self.rows;
         let mut trans = Matrix::new(rows, cols);
@@ -49,7 +49,7 @@ impl Matrix {
         trans
     }
 
-    pub fn map<F>(&mut self, func: F) -> Matrix
+    pub fn map<F>(&self, func: F) -> Matrix
     where
         F: Fn(f32) -> f32,
     {
@@ -63,10 +63,38 @@ impl Matrix {
 
         result
     }
+
+    pub fn mul(&self, rhs: &Matrix) -> Matrix {
+        let mut matrix = Matrix::new(self.rows, self.cols);
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                matrix.data[i][j] = self.data[i][j] * rhs.data[i][j]
+            }
+        }
+
+        matrix
+    }
 }
 
-impl Add<f32> for Matrix {
-    type Output = Self;
+impl Sub<&Matrix> for &Matrix {
+    type Output = Matrix;
+
+    fn sub(self, rhs: &Matrix) -> Self::Output {
+        let mut matrix = Matrix::new(self.rows, self.cols);
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                matrix.data[i][j] = self.data[i][j] - rhs.data[i][j];
+            }
+        }
+
+        matrix
+    }
+}
+
+impl Add<f32> for &Matrix {
+    type Output = Matrix;
 
     fn add(self, rhs: f32) -> Self::Output {
         let mut result = Matrix::new(self.rows, self.cols);
@@ -81,9 +109,25 @@ impl Add<f32> for Matrix {
     }
 }
 
+impl Add<&Matrix> for &Matrix {
+    type Output = Matrix;
+
+    fn add(self, rhs: &Matrix) -> Self::Output {
+        let mut result = Matrix::new(self.rows, self.cols);
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                result.data[i][j] = self.data[i][j] + rhs.data[i][j];
+            }
+        }
+
+        result
+    }
+}
+
 /// Multiply float values
-impl Mul<f32> for Matrix {
-    type Output = Self;
+impl Mul<f32> for &Matrix {
+    type Output = Matrix;
 
     fn mul(self, rhs: f32) -> Self::Output {
         let mut result = Matrix::new(self.rows, self.cols);
@@ -98,10 +142,10 @@ impl Mul<f32> for Matrix {
     }
 }
 
-impl Mul<Matrix> for Matrix {
-    type Output = Self;
+impl Mul<&Matrix> for &Matrix {
+    type Output = Matrix;
 
-    fn mul(self, rhs: Matrix) -> Self::Output {
+    fn mul(self, rhs: &Matrix) -> Self::Output {
         let cols = rhs.cols;
         let rows = self.rows;
         let mut result = Matrix::new(rows, cols);
@@ -136,17 +180,17 @@ mod tests {
     fn test_add_f32() {
         let matrix = Matrix::new(2, 2);
         assert_eq!(
-            (matrix + 1.0).data,
+            (&matrix + 1.0).data,
             vec![vec![1f32, 1f32], vec![1f32, 1f32]]
         );
     }
 
     #[test]
     fn test_multiply_f32() {
-        let matrix = Matrix::new(2, 2) + 1.5;
+        let matrix = &Matrix::new(2, 2) + 1.5;
 
         assert_eq!(
-            (matrix * 2.0).data,
+            (&matrix * 2.0).data,
             vec![vec![3f32, 3f32], vec![3f32, 3f32]]
         );
     }
@@ -190,10 +234,10 @@ mod tests {
         ];
 
         for (first, second, exp) in scenarios {
-            let m1 = Matrix::from_vec(first);
-            let m2 = Matrix::from_vec(second);
+            let m1 = Matrix::from_vec(&first);
+            let m2 = Matrix::from_vec(&second);
 
-            assert_eq!((m1 * m2).data, exp);
+            assert_eq!((&m1 * &m2).data, exp);
         }
     }
 }
