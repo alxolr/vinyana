@@ -1,158 +1,165 @@
+use std::{error::Error, fs::File, io::Read, path::Path};
+
 use matrix::Matrix;
 use rand::{thread_rng, Rng};
+use serde::{Deserialize, Serialize};
 
 mod matrix;
 pub const E: f32 = 2.7182818284590451f32;
-
-type Float2D = Vec<Vec<f32>>;
 
 pub fn sigmoid(x: f32) -> f32 {
     1.0 / (1.0 + E.powf(-x))
 }
 
-pub fn reverse(x: &Matrix) -> Matrix {
-    let matrix = x * -1.0;
+pub fn sigmoid_derivate(x: f32) -> f32 {
+    x * (1.0 - x)
+}
 
-    &matrix + 1.0
+pub fn relu(x: f32) -> f32 {
+    x.max(0.0)
+}
+
+pub fn tahn(x: f32) -> f32 {
+    (E.powf(x) - E.powf(-x)) / (E.powf(x) + E.powf(-x))
 }
 
 /// First iteration of Neural Network with only 3 layers input -> hidden -> output
+#[derive(Serialize, Deserialize)]
 pub struct NeuralNetwork {
     pub input_nodes: usize,
     pub hidden_nodes: usize,
     pub output_nodes: usize,
     pub learning_rate: f32,
-    pub wih: Matrix,
-    pub who: Matrix,
+    pub w_input_hidden: Matrix,
+    pub w_hidden_output: Matrix,
+    pub w_bias_hidden: Matrix,
+    pub w_bias_output: Matrix,
 }
 
 impl NeuralNetwork {
     /// The posibility to initialise a completly new neural network
     /// All the weights will be random from -1 to 1 floats
-    pub fn new(inputs: usize, hidden: usize, outputs: usize, learning_rate: f32) -> NeuralNetwork {
+    pub fn new(
+        input_nodes: usize,
+        hidden_nodes: usize,
+        output_nodes: usize,
+        learning_rate: f32,
+    ) -> NeuralNetwork {
         let rng = thread_rng();
 
-        let mut wih = Matrix::new(hidden, inputs);
-        let mut who = Matrix::new(outputs, hidden);
+        let mut w_input_hidden = Matrix::new(hidden_nodes, input_nodes);
+        let mut w_hidden_output = Matrix::new(output_nodes, hidden_nodes);
+
+        let mut w_bias_hidden = Matrix::new(hidden_nodes, 1);
+        let mut w_bias_output = Matrix::new(output_nodes, 1);
 
         let randomize = |_| rng.clone().gen_range(-1.0..1.0);
 
-        wih = wih.map(randomize);
-        who = who.map(randomize);
+        // randomize weights
+        w_input_hidden = w_input_hidden.map(randomize);
+        w_hidden_output = w_hidden_output.map(randomize);
+
+        // randomize biases
+        w_bias_hidden = w_bias_hidden.map(randomize);
+        w_bias_output = w_bias_output.map(randomize);
 
         NeuralNetwork {
-            input_nodes: inputs,
-            hidden_nodes: hidden,
-            output_nodes: outputs,
+            input_nodes,
+            hidden_nodes,
+            output_nodes,
             learning_rate,
-            wih,
-            who,
+            w_input_hidden,
+            w_hidden_output,
+            w_bias_hidden,
+            w_bias_output,
         }
     }
 
-    pub fn train(&mut self, inputs: &Float2D, targets: &Float2D) {
-        let inputs = Matrix::from_vec(inputs);
-        let targets = Matrix::from_vec(targets);
+    pub fn load(filepath: &Path) -> Result<NeuralNetwork, Box<dyn Error>> {
+        let mut file = File::open(filepath)?;
 
-        let hidden_inputs = &self.wih * &inputs;
+        let mut contents = vec![];
+        file.read_to_end(&mut contents)?;
+
+        let nn: NeuralNetwork = bincode::deserialize(&contents)?;
+
+        Ok(nn)
+    }
+
+    pub fn save(&self, filepath: &Path) -> Result<(), Box<dyn Error>> {
+        let encoded = bincode::serialize(self).expect("Could not serialize the model");
+        std::fs::write(filepath, encoded).expect("Could not save the model in the provided path");
+
+        Ok(())
+    }
+
+    pub fn train(&mut self, inputs: &Vec<f32>, targets: &Vec<f32>) {
+        // Do the prediction logic
+        let inputs = Matrix::from_vec(inputs);
+
+        let hidden_inputs = &(&self.w_input_hidden * &inputs) + &self.w_bias_hidden;
         let hidden_outputs = hidden_inputs.map(sigmoid);
 
-        let final_inputs = &self.who * &hidden_outputs;
+        let final_inputs = &(&self.w_hidden_output * &hidden_outputs) + &self.w_bias_output;
         let final_outputs = final_inputs.map(sigmoid);
 
+        let targets = Matrix::from_vec(targets);
         let output_errors = &targets - &final_outputs;
-        let hidden_errors = &self.who.transpose() * &output_errors;
 
-        self.who =
-            &self.who + &(self.back_propagate(&output_errors, &final_outputs, &hidden_inputs));
+        // Compute the output gradient
+        let output_gradients = final_outputs.map(sigmoid_derivate);
+        let output_gradients = output_gradients.mul(&output_errors);
+        let output_gradients = &output_gradients * self.learning_rate;
 
-        self.wih = &self.wih + &(self.back_propagate(&hidden_errors, &hidden_outputs, &inputs));
+        let w_hidden_output_deltas = &output_gradients * &(hidden_outputs.transpose());
+
+        self.w_hidden_output = &self.w_hidden_output + &w_hidden_output_deltas;
+        self.w_bias_output = &self.w_bias_output + &output_gradients;
+
+        // compute the hidden layer errors
+
+        let w_hidden_output_transposed = self.w_hidden_output.transpose();
+        let hidden_errors = &w_hidden_output_transposed * &output_errors;
+
+        let hidden_gradients = hidden_outputs.map(sigmoid_derivate);
+        let hidden_gradients = hidden_gradients.mul(&hidden_errors);
+        let hidden_gradients = &hidden_gradients * self.learning_rate;
+
+        let inputs_transposed = inputs.transpose();
+        let w_input_hidden_deltas = &hidden_gradients * &inputs_transposed;
+
+        self.w_input_hidden = &self.w_input_hidden + &w_input_hidden_deltas;
+        self.w_bias_hidden = &self.w_bias_hidden + &hidden_gradients;
     }
+    pub fn predict(&self, inputs: &Vec<f32>) -> Vec<f32> {
+        let inputs = Matrix::from_vec(inputs);
 
-    fn back_propagate(&self, errors: &Matrix, outputs: &Matrix, inputs: &Matrix) -> Matrix {
-        let errors_outputs = errors.mul(outputs);
-        let rev_outputs = reverse(outputs);
-        let err_rev_outputs = errors_outputs.mul(&rev_outputs);
-        let err_inputs = &err_rev_outputs * &inputs.transpose();
-
-        &err_inputs * self.learning_rate
-    }
-
-    pub fn predict(&self, inputs: &Float2D) -> Matrix {
-        let inputs_m = Matrix::from_vec(inputs);
-
-        let hidden_inputs = &self.wih.clone() * &inputs_m;
+        let hidden_inputs = &(&self.w_input_hidden * &inputs) + &self.w_bias_hidden;
         let hidden_outputs = hidden_inputs.map(sigmoid);
 
-        let final_inputs = &self.who.clone() * &hidden_outputs;
+        let final_inputs = &(&self.w_hidden_output * &hidden_outputs) + &self.w_bias_output;
         let final_outputs = final_inputs.map(sigmoid);
 
         final_outputs
+            .data
+            .iter()
+            .flatten()
+            .map(|x| *x)
+            .collect::<Vec<_>>()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use rand::{prelude::SliceRandom, thread_rng, Rng};
 
     use crate::NeuralNetwork;
 
     #[test]
     fn test_neural_network_initialisation() {
-        let nn = NeuralNetwork::new(3, 3, 1, 0.01);
+        let nn = NeuralNetwork::new(3, 3, 1, 0.001);
 
         assert_eq!(nn.hidden_nodes, 3);
         assert_eq!(nn.input_nodes, 3);
         assert_eq!(nn.output_nodes, 1);
-    }
-
-    #[test]
-    fn test_predict_is_building() {
-        let nn = NeuralNetwork::new(2, 2, 1, 0.01);
-
-        let cor1 = nn.predict(&vec![vec![1.0], vec![0.0]]);
-        let cor2 = nn.predict(&vec![vec![1.0], vec![0.0]]);
-        let cor3 = nn.predict(&vec![vec![1.0], vec![0.0]]);
-        let cor4 = nn.predict(&vec![vec![1.0], vec![0.0]]);
-
-        println!(
-            "predicted {:?} {:?} {:?} {:?}",
-            cor1.data, cor2.data, cor3.data, cor4.data
-        );
-    }
-
-    #[test]
-    fn test_train_is_building() {
-        let mut nn = NeuralNetwork::new(2, 2, 1, 0.05);
-
-        let mut scenarios = vec![
-            (vec![vec![0.0], vec![1.0]], vec![vec![1.0]]),
-            (vec![vec![1.0], vec![0.0]], vec![vec![1.0]]),
-            (vec![vec![0.0], vec![0.0]], vec![vec![0.0]]),
-            (vec![vec![1.0], vec![1.0]], vec![vec![0.0f32]]),
-        ];
-
-        println!("it's training");
-        // training epochs
-        for _ in 0..10000 {
-            // let random = thread_rng().gen_range(0..scenarios.len());
-            // // let (train_data, target_data) = scenarios.get(random).unwrap();
-            // let mut rng = thread_rng();
-            // scenarios.shuffle(&mut rng);
-
-            scenarios
-                .iter()
-                .for_each(|(train_data, target_data)| nn.train(&train_data, target_data))
-        }
-
-        // for scenario in scenarios {}
-
-        let t = nn.predict(&vec![vec![1.0], vec![1.0]]);
-        let f = nn.predict(&vec![vec![1.0], vec![1.0]]);
-
-        println!("Predict true {:?}", &t.data);
-        println!("Predic false {:?}", &f.data);
-
-        // println!("error {:?}", res.data);
     }
 }
