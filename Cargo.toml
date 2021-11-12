@@ -1,11 +1,18 @@
 [package]
-edition = "2018"
 name = "vinyana"
+description = "A neural network library" 
 version = "0.1.0"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+edition = "2018"
+authors = ["Alexandru Olaru <alxolr@gmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/alxolr/vinyana"
+include = [
+    "**/*.rs",
+    "Cargo.toml",
+]
+keywords = ["neural-network", "perceptron"]
 
 [dependencies]
-bincode = "*"
-rand = "*"
-serde = {version = "*", features = ["derive"]}
+bincode = "1.3"
+rand = "0.8"
+serde = {version = "1.0", features = ["derive"]}
