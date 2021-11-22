@@ -1,25 +1,21 @@
+pub mod activation;
+pub mod loss;
+
 use std::{error::Error, fs::File, io::Read, path::Path};
 
+use activation::{Activation, Ff32};
 use ndarray::Array2;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 
-pub const E: f32 = 2.7182818284590451f32;
-
-pub fn sigmoid(x: f32) -> f32 {
-    1.0 / (1.0 + E.powf(-x))
+pub struct Layer {
+    pub nodes: u32,
 }
 
-pub fn sigmoid_derivate(x: f32) -> f32 {
-    x * (1.0 - x)
-}
-
-pub fn relu(x: f32) -> f32 {
-    x.max(0.0)
-}
-
-pub fn tahn(x: f32) -> f32 {
-    (E.powf(x) - E.powf(-x)) / (E.powf(x) + E.powf(-x))
+impl Layer {
+    pub fn new(nodes: u32) -> Self {
+        Layer { nodes }
+    }
 }
 
 /// First iteration of Neural Network with only 3 layers input -> hidden -> output
@@ -33,6 +29,7 @@ pub struct NeuralNetwork {
     pub w_hidden_output: Array2<f32>,
     pub w_bias_hidden: Array2<f32>,
     pub w_bias_output: Array2<f32>,
+    pub activation: Activation,
 }
 
 impl NeuralNetwork {
@@ -71,6 +68,7 @@ impl NeuralNetwork {
             w_hidden_output,
             w_bias_hidden,
             w_bias_output,
+            activation: Activation::new(activation::ActivationType::Sigmoid),
         }
     }
 
@@ -97,15 +95,15 @@ impl NeuralNetwork {
         let targets = Array2::from_shape_vec((self.output_nodes, 1), targets).unwrap();
 
         let hidden_inputs = &self.w_input_hidden.dot(&inputs) + &self.w_bias_hidden;
-        let hidden_outputs = hidden_inputs.mapv(sigmoid);
+        let hidden_outputs = hidden_inputs.mapv(self.activation.f);
 
         let final_inputs = &self.w_hidden_output.dot(&hidden_outputs) + &self.w_bias_output;
-        let final_outputs = final_inputs.mapv(sigmoid);
+        let final_outputs = final_inputs.mapv(self.activation.f);
 
         let output_errors = &targets - &final_outputs;
-        
+
         // Compute the output gradient
-        let output_gradients = final_outputs.mapv(sigmoid_derivate);
+        let output_gradients = final_outputs.mapv(self.activation.df);
         let output_gradients = output_gradients * &output_errors;
         let output_gradients = &output_gradients * self.learning_rate;
 
@@ -119,7 +117,7 @@ impl NeuralNetwork {
         let w_hidden_output_transposed = self.w_hidden_output.t();
         let hidden_errors = w_hidden_output_transposed.dot(&output_errors);
 
-        let hidden_gradients = hidden_outputs.mapv(sigmoid_derivate);
+        let hidden_gradients = hidden_outputs.mapv(self.activation.df);
         let hidden_gradients = hidden_gradients * &hidden_errors;
         let hidden_gradients = &hidden_gradients * self.learning_rate;
 
@@ -134,10 +132,10 @@ impl NeuralNetwork {
         let inputs = Array2::from_shape_vec((self.input_nodes, 1), inputs).unwrap();
 
         let hidden_inputs = &self.w_input_hidden.dot(&inputs) + &self.w_bias_hidden;
-        let hidden_outputs = hidden_inputs.mapv(sigmoid);
+        let hidden_outputs = hidden_inputs.mapv(self.activation.f);
 
         let final_inputs = &self.w_hidden_output.dot(&hidden_outputs) + &self.w_bias_output;
-        let final_outputs = final_inputs.mapv(sigmoid);
+        let final_outputs = final_inputs.mapv(self.activation.f);
 
         final_outputs
     }
@@ -170,7 +168,7 @@ mod tests {
             (vec![0., 1.], vec![1.]),
         ];
 
-        for _ in 0..8000 {
+        for _ in 0..10000 {
             train_dataset.shuffle(&mut rng);
 
             train_dataset
