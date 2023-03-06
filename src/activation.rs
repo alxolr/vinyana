@@ -1,8 +1,6 @@
-use core::panic;
-
-use serde::{de::Visitor, Deserialize, Serialize};
-
 /// List of activation functions and their derivates
+/// For now we support ReLU, Tahn and Sigmoid
+use serde::{de::Visitor, Deserialize, Serialize};
 
 pub type Ff32 = fn(f32) -> f32;
 pub const E: f32 = 2.7182818284590451f32;
@@ -13,15 +11,19 @@ pub enum ActivationType {
     Tanh,
 }
 
+#[derive(Debug)]
 pub struct Activation {
+    /// The activation function
     pub f: Ff32,
+    /// Derivative of the activation function used for backward propagation algorithm
     pub df: Ff32,
+    /// This value is used for serialization, we serialize a string and build the activation from it
     t: String,
 }
 
 impl Activation {
-    pub fn new(t: ActivationType) -> Self {
-        match t {
+    pub fn new(tp: ActivationType) -> Self {
+        match tp {
             ActivationType::Sigmoid => Activation {
                 f: sigmoid,
                 df: sigmoid_derivative,
@@ -77,7 +79,7 @@ impl<'de> Deserialize<'de> for Activation {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_any(ActivationVisitor)
+        deserializer.deserialize_string(ActivationVisitor)
     }
 }
 
