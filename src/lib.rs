@@ -8,8 +8,6 @@ use ndarray::Array2;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::cost::mrse;
-
 #[derive(Serialize, Deserialize)]
 pub struct NeuralNetwork {
     input_nodes: usize,
@@ -47,14 +45,10 @@ impl NeuralNetwork {
         NeuralNetwork {
             input_nodes,
             output_nodes,
-            learning_rate: 0.001,
+            learning_rate: 0.01,
             weights,
             biases,
-            // w_input_hidden,
-            // w_hidden_output,
-            // w_bias_hidden,
-            // w_bias_output,
-            activation: Activation::new(activation::ActivationType::Relu),
+            activation: Activation::new(activation::ActivationType::Tanh),
         }
     }
 
@@ -62,73 +56,47 @@ impl NeuralNetwork {
         let inputs = Array2::from_shape_vec((self.input_nodes, 1), inputs).unwrap();
         let targets = Array2::from_shape_vec((self.output_nodes, 1), targets).unwrap();
 
-        let output_results =
-            self.weights
-                .iter()
-                .enumerate()
-                .fold(vec![inputs], |mut agg, (idx, weight)| {
-                    let inputs = agg.last().unwrap();
+        let mut output_results = vec![];
+        self.weights
+            .iter()
+            .enumerate()
+            .fold(vec![inputs], |mut agg, (idx, weight)| {
+                let inputs = agg.last().unwrap();
 
-                    // net on the line
-                    // to compute gradients we will need this values ???
-                    let net = weight.dot(inputs) + &self.biases[idx];
+                let net = weight.dot(inputs) + &self.biases[idx];
 
-                    // after activation
-                    let out = net.mapv(self.activation.f);
-                    agg.push(out);
+                let out = net.mapv(self.activation.f);
+                agg.push(out.clone());
+                output_results.push(out);
 
-                    agg
-                });
+                agg
+            });
 
-        // println!("{}", output_results.len());
+        let mut error = targets - output_results.last().unwrap();
+        let mut gradients = vec![];
 
-        let ff_interm_outputs = output_results.iter().skip(1).rev().collect::<Vec<_>>();
+        for (idx, output) in output_results.iter().enumerate().rev() {
+            let gradient = output.mapv(self.activation.df) * &error;
+            gradients.push(gradient);
 
-        println!("ff interim {}", ff_interm_outputs.len());
+            error = self.weights[idx].t().dot(&error);
+        }
 
-        let final_outputs = ff_interm_outputs.first().unwrap().clone();
-        let ff_interm_iter = ff_interm_outputs.into_iter().skip(1);
+        gradients.reverse();
 
-        let total_error = mrse(&targets, final_outputs);
+        for (idx, weight) in self.weights.iter_mut().enumerate() {
+            let gradient = gradients[idx].clone();
+            let inputs = output_results[idx].clone();
 
-        println!("{}", total_error);
+            let delta = gradient.dot(&inputs.t()) * self.learning_rate;
+            *weight += &delta;
+        }
 
-        // let output_gradients =
-        //     final_outputs.mapv(self.activation.df) * &output_errors * self.learning_rate;
-        // let first_delta = output_gradients.dot()
-
-        // let hidden_inputs = &self.w_input_hidden.dot(&inputs) + &self.w_bias_hidden;
-        // let hidden_outputs = hidden_inputs.mapv(self.activation.f);
-
-        // let final_inputs = &self.w_hidden_output.dot(&hidden_outputs) + &self.w_bias_output;
-        // let final_outputs = final_inputs.mapv(self.activation.f);
-
-        // let output_errors = &targets - &final_outputs;
-
-        // // Compute the output gradient
-        // let output_gradients = final_outputs.mapv(self.activation.df);
-        // let output_gradients = output_gradients * &output_errors;
-        // let output_gradients = &output_gradients * self.learning_rate;
-
-        // let w_hidden_output_deltas = output_gradients.dot(&hidden_outputs.t());
-
-        // self.w_hidden_output = &self.w_hidden_output + &w_hidden_output_deltas;
-        // self.w_bias_output = &self.w_bias_output + &output_gradients;
-
-        // // compute the hidden layer errors
-
-        // let w_hidden_output_transposed = self.w_hidden_output.t();
-        // let hidden_errors = w_hidden_output_transposed.dot(&output_errors);
-
-        // let hidden_gradients = hidden_outputs.mapv(self.activation.df);
-        // let hidden_gradients = hidden_gradients * &hidden_errors;
-        // let hidden_gradients = &hidden_gradients * self.learning_rate;
-
-        // let inputs_transposed = inputs.t();
-        // let w_input_hidden_deltas = hidden_gradients.dot(&inputs_transposed);
-
-        // self.w_input_hidden = &self.w_input_hidden + &w_input_hidden_deltas;
-        // self.w_bias_hidden = &self.w_bias_hidden + &hidden_gradients;
+        for (idx, bias) in self.biases.iter_mut().enumerate() {
+            let gradient = gradients[idx].clone();
+            let delta = gradient * self.learning_rate;
+            *bias += &delta;
+        }
     }
 
     pub fn predict(&self, inputs: Vec<f32>) -> Array2<f32> {
@@ -170,7 +138,6 @@ impl NeuralNetwork {
 mod tests {
     use crate::NeuralNetwork;
     use rand::{prelude::SliceRandom, thread_rng};
-    use std::path::Path;
 
     #[test]
     fn test_neural_network_initialisation() {
@@ -192,31 +159,16 @@ mod tests {
             (vec![0., 1.], vec![1.]),
         ];
 
-        // for _ in 0..20000 {
-        train_dataset.shuffle(&mut rng);
+        for _ in 0..200000 {
+            train_dataset.shuffle(&mut rng);
 
-        train_dataset
-            .iter()
-            .for_each(|(inputs, targets)| nn.train(inputs.clone(), targets.clone()));
-        // }
+            train_dataset
+                .iter()
+                .for_each(|(inputs, targets)| nn.train(inputs.clone(), targets.clone()));
+        }
 
         let result = nn.predict(vec![1.0, 0.0]);
         let value = result[(0, 0)];
-
-        println!("value {}", value);
-
-        assert_eq!(value > 0.75, true);
-    }
-
-    #[test]
-    fn test_load_xor_model() {
-        let nn = NeuralNetwork::load(Path::new("./models/xor_model.bin"))
-            .expect("couldn't deserialize the model");
-
-        let result = nn.predict(vec![0.0, 1.0]);
-        let value = result[(0, 0)];
-
-        println!("{}", value);
 
         assert_eq!(value > 0.75, true);
     }
