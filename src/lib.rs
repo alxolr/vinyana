@@ -48,8 +48,16 @@ impl NeuralNetwork {
             learning_rate: 0.01,
             weights,
             biases,
-            activation: Activation::new(activation::ActivationType::Tanh),
+            activation: Activation::new(activation::ActivationType::Sigmoid),
         }
+    }
+
+    pub fn set_learning_rate(&mut self, learning_rate: f32) {
+        self.learning_rate = learning_rate;
+    }
+
+    pub fn set_activation(&mut self, activation: activation::ActivationType) {
+        self.activation = Activation::new(activation);
     }
 
     pub fn train(&mut self, inputs: Vec<f32>, targets: Vec<f32>) {
@@ -99,10 +107,12 @@ impl NeuralNetwork {
         }
     }
 
-    pub fn predict(&self, inputs: Vec<f32>) -> Array2<f32> {
+    pub fn predict(&self, inputs: Vec<f32>) -> Vec<f32> {
         let inputs = Array2::from_shape_vec((self.input_nodes, 1), inputs).unwrap();
 
-        self.feed_forward(inputs)
+        let result = self.feed_forward(inputs);
+
+        result.iter().map(|x| *x).collect()
     }
 
     pub fn load(filepath: &Path) -> Result<NeuralNetwork, Box<dyn Error>> {
@@ -136,7 +146,7 @@ impl NeuralNetwork {
 
 #[cfg(test)]
 mod tests {
-    use crate::NeuralNetwork;
+    use crate::{activation, NeuralNetwork};
     use rand::{prelude::SliceRandom, thread_rng};
 
     #[test]
@@ -150,6 +160,9 @@ mod tests {
     #[test]
     fn test_xor_problem() {
         let mut nn = NeuralNetwork::new(vec![2, 2, 1]);
+        nn.set_activation(activation::ActivationType::Tanh);
+        nn.set_learning_rate(0.01);
+
         let mut rng = thread_rng();
 
         let mut train_dataset = vec![
@@ -159,7 +172,7 @@ mod tests {
             (vec![0., 1.], vec![1.]),
         ];
 
-        for _ in 0..200000 {
+        for _ in 0..50000 {
             train_dataset.shuffle(&mut rng);
 
             train_dataset
@@ -168,8 +181,8 @@ mod tests {
         }
 
         let result = nn.predict(vec![1.0, 0.0]);
-        let value = result[(0, 0)];
+        let value = result.first().unwrap();
 
-        assert_eq!(value > 0.75, true);
+        assert_eq!(value > &0.75, true);
     }
 }
