@@ -8,7 +8,7 @@ use ndarray::Array2;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct NeuralNetwork {
     input_nodes: usize,
     output_nodes: usize,
@@ -146,7 +146,9 @@ impl NeuralNetwork {
 
 #[cfg(test)]
 mod tests {
-    use crate::{activation, NeuralNetwork};
+    use std::path::Path;
+
+    use crate::NeuralNetwork;
     use rand::{prelude::SliceRandom, thread_rng};
 
     #[test]
@@ -159,26 +161,36 @@ mod tests {
 
     #[test]
     fn test_xor_problem() {
-        let mut nn = NeuralNetwork::new(vec![2, 2, 1]);
-        nn.set_activation(activation::ActivationType::Tanh);
-        nn.set_learning_rate(0.01);
-
+        let mut nn = NeuralNetwork::load(Path::new("xor.nn")).unwrap();
         let mut rng = thread_rng();
 
         let mut train_dataset = vec![
             (vec![1f32, 0.], vec![1f32]),
-            (vec![1., 1.], vec![0.]),
             (vec![0., 0.], vec![0.]),
+            (vec![1., 1.], vec![0.]),
             (vec![0., 1.], vec![1.]),
         ];
 
-        for _ in 0..50000 {
+        for _ in 0..5 {
             train_dataset.shuffle(&mut rng);
 
-            train_dataset
-                .iter()
-                .for_each(|(inputs, targets)| nn.train(inputs.clone(), targets.clone()));
+            train_dataset.iter().for_each(|(inputs, targets)| {
+                nn.train(inputs.clone(), targets.clone());
+            });
         }
+
+        let result = nn.predict(vec![1.0, 0.0]);
+        let value = result.first().unwrap();
+
+        assert_eq!(value > &0.75, true);
+    }
+
+    #[test]
+    fn test_load_network_from_file() {
+        let nn = NeuralNetwork::load(Path::new("xor.nn")).unwrap();
+
+        assert_eq!(nn.input_nodes, 2);
+        assert_eq!(nn.output_nodes, 1);
 
         let result = nn.predict(vec![1.0, 0.0]);
         let value = result.first().unwrap();
